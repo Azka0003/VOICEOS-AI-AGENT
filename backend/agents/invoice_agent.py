@@ -5,9 +5,7 @@ Never makes decisions. Returns a single unified context object for all downstrea
 """
 
 from tools.excel_tool import excel_tool
-from tools.chroma_tool import ChromaTool
-
-chroma_tool = ChromaTool()
+from tools.chroma_tool import chroma_tool
 
 
 class InvoiceAgent:

@@ -158,13 +158,15 @@ class ExcelTool:
         """
         Returns all rows (excluding 'paid') with dynamically recalculated days_overdue.
         Automatically fixes stale overdue values in the Excel file.
+        Opens read-only first; only re-opens for write if stale values are found.
         """
-        invoices =[]
-        updates_made = False
+        invoices = []
+        stale_rows: dict[int, int] = {}  # row_number -> corrected days_overdue
 
-        with locked_excel(self.filepath, mode="w") as wb:
+        # ── Pass 1: read-only ────────────────────────────────────────────────
+        with locked_excel(self.filepath, mode="r") as wb:
             ws = wb.active
-            
+
             for row in range(2, ws.max_row + 1):
                 status = str(ws.cell(row=row, column=6).value or "").strip().lower()
                 if status == "paid":
@@ -176,13 +178,10 @@ class ExcelTool:
 
                 due_date_raw = ws.cell(row=row, column=4).value
                 old_overdue = int(ws.cell(row=row, column=5).value or 0)
-                
-                # Recalculate days overdue
                 real_overdue = recalculate_days_overdue(due_date_raw)
-                
+
                 if real_overdue != old_overdue:
-                    ws.cell(row=row, column=5).value = real_overdue
-                    updates_made = True
+                    stale_rows[row] = real_overdue
 
                 invoices.append({
                     "id": inv_id,
@@ -204,9 +203,12 @@ class ExcelTool:
                     "last_updated_at": str(ws.cell(row=row, column=17).value or "")
                 })
 
-            # Revert to read-only mode if no updates occurred to prevent unnecessary saves
-            if not updates_made:
-                wb.close()
+        # ── Pass 2: write-back only when necessary ───────────────────────────
+        if stale_rows:
+            with locked_excel(self.filepath, mode="w") as wb:
+                ws = wb.active
+                for row, corrected in stale_rows.items():
+                    ws.cell(row=row, column=5).value = corrected
 
         return invoices
 

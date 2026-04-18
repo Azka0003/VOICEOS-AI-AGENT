@@ -270,3 +270,9 @@ class ChromaTool:
             return bool(result["ids"])
         except Exception:
             return False
+
+
+# ── Shared singleton ──────────────────────────────────────────────────────────
+# All modules must import this instance rather than constructing their own.
+# This guarantees the data seeded at startup remains visible everywhere.
+chroma_tool = ChromaTool()

@@ -422,5 +422,116 @@
     "confidence": 1.0,
     "client": "Raj Traders",
     "reason_not_triggered": "All conditions clear."
+  },
+  {
+    "timestamp": "2026-04-18T17:38:48.951714+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 1197,
+    "prompt_length_chars": 72,
+    "response_length_chars": 180,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T17:40:35.018111+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 826,
+    "prompt_length_chars": 72,
+    "response_length_chars": 180,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T17:40:35.430672+00:00",
+    "hitl_triggered": false,
+    "hitl_evaluated": true,
+    "confidence": 1.0,
+    "client": "Raj Traders",
+    "reason_not_triggered": "All conditions clear."
+  },
+  {
+    "timestamp": "2026-04-18T17:45:58.502930+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 963,
+    "prompt_length_chars": 72,
+    "response_length_chars": 180,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T17:45:58.937478+00:00",
+    "hitl_triggered": false,
+    "hitl_evaluated": true,
+    "confidence": 1.0,
+    "client": "Raj Traders",
+    "reason_not_triggered": "All conditions clear."
+  },
+  {
+    "timestamp": "2026-04-18T18:10:00.631448+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 930,
+    "prompt_length_chars": 72,
+    "response_length_chars": 180,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T18:10:01.356130+00:00",
+    "hitl_triggered": false,
+    "hitl_evaluated": true,
+    "confidence": 1.0,
+    "client": "Raj Traders",
+    "reason_not_triggered": "All conditions clear."
+  },
+  {
+    "timestamp": "2026-04-18T18:14:44.732022+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 902,
+    "prompt_length_chars": 72,
+    "response_length_chars": 180,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T18:14:45.096685+00:00",
+    "hitl_triggered": false,
+    "hitl_evaluated": true,
+    "confidence": 1.0,
+    "client": "Raj Traders",
+    "reason_not_triggered": "All conditions clear."
+  },
+  {
+    "timestamp": "2026-04-18T18:15:58.768247+00:00",
+    "agent": "voice_call",
+    "action": "payment_promise_recorded",
+    "client": "Raj Traders",
+    "promise_date": "this Friday",
+    "amount_promised": "full amount",
+    "source": "live_call"
   }
 ]
