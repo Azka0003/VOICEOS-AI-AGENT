@@ -1,7 +1,7 @@
 import json
 import os
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 MOCK_INVOICES_PATH = os.path.join(DATA_DIR, "mock_invoices.json")
 
 class InvoiceAgent:

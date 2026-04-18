@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timezone
 
 # Ensure the data directory exists
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 LINEAGE_LOG_PATH = os.path.join(DATA_DIR, "lineage_log.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
