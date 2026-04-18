@@ -1,0 +1,34 @@
+{
+  "Raj Traders": {
+    "contacts": [
+      {
+        "type": "email",
+        "timestamp": "2026-04-17T18:44:03.167000",
+        "tone": "friendly_reminder",
+        "subject": "Friendly Payment Reminder",
+        "email_body": "Dear Raj Traders,\n\nThis is a friendly reminder regarding some outstanding invoices on your account.\n\nOur records indicate a total outstanding balance of \u20b957,000, comprised of the following:\n\n*   INV001: \u20b945,000 (due 2025-03-01, currently 47 days overdue)\n*   INV002: \u20b912,000 (due 2025-03-15, currently 33 days overdue)\n\nWe understand that things can sometimes be overlooked, and we would appreciate it if you could review these invoices and arrange for payment at your earliest convenience.\n\nPlease let us know if you have already processed these payments or if there's anything we can do to assist you.\n\nThank you for your business and continued partnership.\n\nSincerely,\n\nVoiceOS Collections Team",
+        "outcome": "sent",
+        "human_approved": true,
+        "excel_updated": false
+      },
+      {
+        "type": "email",
+        "timestamp": "2026-04-17T19:00:22.459901",
+        "tone": "urgent_followup",
+        "subject": "Urgent: Payment Required",
+        "email_body": "Dear Raj Traders,\n\nThis email serves as a formal reminder regarding outstanding payments on your account. Our records indicate a total outstanding balance of \u20b957,000.\n\nThe following invoices are currently overdue:\n\n*   INV001: \u20b945,000 (Due: 2025-03-01, 47 days overdue)\n*   INV002: \u20b912,000 (Due: 2025-03-15, 33 days overdue)\n\nWe kindly request that you remit the full outstanding amount of \u20b957,000 within seven (7) days of the date of this email. Please ensure payment is made via [mention preferred payment method(s) - e.g., bank transfer, online payment portal].\n\nFailure to receive payment by [Date - 7 days from email date] may unfortunately necessitate further action to recover the debt. We value your business and would prefer to resolve this matter amicably.\n\nPlease contact us immediately if you have already made a payment or if you require clarification regarding these invoices.\n\nSincerely,\n\nVoiceOS Collections Team",
+        "outcome": "sent",
+        "human_approved": true,
+        "excel_updated": false
+      },
+      {
+        "type": "email",
+        "timestamp": "2026-04-17T19:58:02.500067",
+        "tone": "final_notice",
+        "subject": "Final Notice Before Legal Action",
+        "email_body": "Dear Raj Traders,\n\nRe: Overdue Payment Notification for INV001 and INV002\n\nWe are writing to bring to your attention that your account with us is significantly overdue. As per our records, the total outstanding amount is \u20b957,000, which is comprised of two unpaid invoices: INV001 for \u20b945,000 (due on 2025-03-01, now 47 days overdue) and INV002 for \u20b912,000 (due on 2025-03-15, now 33 days overdue).\n\nWe urge you to settle this outstanding amount immediately to avoid any further action. We expect payment of the full amount within the next 3 days. If we do not receive payment or a satisfactory response from you within this timeframe, we may be forced to consider legal action to recover the debt.\n\nWe hope that you will take this matter seriously and take immediate action to resolve this outstanding amount. If you are experiencing any difficulties in making the payment, please do not hesitate to contact us to discuss possible alternatives.\n\nSincerely,\nVoiceOS Collections Team",
+        "outcome": "sent"
+      }
+    ]
+  }
+}
