@@ -1,6 +1,7 @@
 import os
+import sys
 import json
-import fcntl
+import time
 import openpyxl
 from datetime import date, datetime, timezone
 from contextlib import contextmanager
@@ -31,24 +32,64 @@ PROTECTED_ACTIONS =["escalate_to_legal", "disputed_under_review"]
 # LOCKING MECHANISM & HELPER FUNCTIONS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+def _acquire_lock(lock_file, exclusive: bool = True):
+    """Cross-platform file locking: msvcrt on Windows, fcntl on Unix."""
+    if sys.platform == "win32":
+        import msvcrt
+        lock_fn = msvcrt.locking
+        mode = msvcrt.LK_NBLCK if not exclusive else msvcrt.LK_LOCK
+        lock_file.seek(0)
+        # msvcrt.locking works on a byte range; lock 1 byte at position 0
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        except OSError:
+            # Retry loop — LK_LOCK only tries 10 times internally; spin here
+            for _ in range(30):
+                time.sleep(0.1)
+                try:
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                    return
+                except OSError:
+                    pass
+            raise TimeoutError("Could not acquire Excel lock within 3 seconds.")
+    else:
+        import fcntl
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+
+
+def _release_lock(lock_file):
+    """Cross-platform lock release."""
+    if sys.platform == "win32":
+        import msvcrt
+        lock_file.seek(0)
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:
+        import fcntl
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
 @contextmanager
 def locked_excel(filepath: str, mode: str = "r"):
     """
-    Opens the Excel file with an OS-level file lock to ensure concurrency safety.
+    Opens the Excel file with a cross-platform OS-level file lock.
     mode: "r" for read-only, "w" for read-write.
+    Works on Windows (msvcrt) and Unix/macOS (fcntl).
     """
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     lock_path = filepath + ".lock"
-    
+
     with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        _acquire_lock(lock_file)
         try:
             wb = openpyxl.load_workbook(filepath, data_only=True)
             yield wb
             if mode == "w":
                 wb.save(filepath)
         finally:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
+            _release_lock(lock_file)
 
 def _log_lineage(entry: dict):
     """Safely append to the lineage log."""
