@@ -3,14 +3,15 @@ import json
 import asyncio
 import base64
 import websockets
-from fastapi import WebSocket # Fixes the import error
+from fastapi import WebSocket
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DEEPGRAM_VOICE_AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse"
 
-def get_agent_config(system_prompt: str | None = None):
+# UPDATE: Added 'greeting' parameter
+def get_agent_config(system_prompt: str | None = None, greeting: str | None = None):
     config = {
         "type": "Settings",
         "audio": {
@@ -33,7 +34,6 @@ def get_agent_config(system_prompt: str | None = None):
                 }
             },
             "think": {
-                # UPDATE: Gave the agent proper context so it knows it is on a phone call
                 "prompt": system_prompt or "You are a professional voice assistant talking to a user over a phone call. Keep your responses concise and conversational. You can hear the user perfectly.",
             },
             "speak": {
@@ -42,7 +42,8 @@ def get_agent_config(system_prompt: str | None = None):
                     "model": "aura-2-thalia-en",
                 }
             },
-            "greeting": "Hello! I am your AI assistant. How can I help you today?",
+            # UPDATE: Dynamic greeting injection
+            "greeting": greeting or "Hello! I am your AI assistant. How can I help you today?",
         },
     }
 
@@ -76,16 +77,17 @@ class DeepgramVoiceAgent:
     Bridges Twilio's mulaw audio WebSocket <-> Deepgram Voice Agent WebSocket.
     """
 
-    def __init__(self, twilio_ws: WebSocket, system_prompt: str | None = None):
+    # UPDATE: Accept greeting parameter
+    def __init__(self, twilio_ws: WebSocket, system_prompt: str | None = None, greeting: str | None = None):
         self.twilio_ws = twilio_ws
         self.api_key = os.getenv("DEEPGRAM_API_KEY")
         self.dg_ws = None
         self._audio_queue: asyncio.Queue = asyncio.Queue()
         self._running = False
-        self.stream_sid = None  # ADDED: Store stream_sid
+        self.stream_sid = None
 
-        # Generate config based on env vars + system prompt
-        self._config = get_agent_config(system_prompt)
+        # Pass both down
+        self._config = get_agent_config(system_prompt, greeting)
 
     def set_stream_sid(self, sid: str):
         """Allows main.py to pass the Twilio streamSid into the agent."""
@@ -106,7 +108,6 @@ class DeepgramVoiceAgent:
             print("\n[FATAL ERROR] Deepgram API key is completely missing! Check your .env file.")
             return
 
-        # Automatically fix accidental quotes or spaces from the .env file
         clean_key = self.api_key.replace('"', '').replace("'", "").strip()
         headers = {"Authorization": f"Token {clean_key}"}
         
@@ -120,11 +121,9 @@ class DeepgramVoiceAgent:
                 self.dg_ws = dg_ws
                 self._running = True
 
-                # Send settings first
                 await dg_ws.send(json.dumps(self._config))
                 print("[DG AGENT] Settings sent successfully!")
 
-                # Run sender + receiver concurrently
                 await asyncio.gather(
                     self._send_audio_loop(dg_ws),
                     self._receive_loop(dg_ws),
@@ -134,7 +133,6 @@ class DeepgramVoiceAgent:
             print(f"Error Details: {e}")
 
     async def _send_audio_loop(self, dg_ws):
-        """Forward mulaw audio from Twilio → Deepgram."""
         while self._running:
             try:
                 chunk = await asyncio.wait_for(self._audio_queue.get(), timeout=1.0)
@@ -145,25 +143,20 @@ class DeepgramVoiceAgent:
                 break
 
     async def _receive_loop(self, dg_ws):
-        """Receive audio/events from Deepgram and forward audio → Twilio."""
         async for message in dg_ws:
             if isinstance(message, bytes):
-                # Audio output from Deepgram TTS — forward to Twilio as-is
                 await self._forward_audio_to_twilio(message)
             else:
-                # JSON event (transcript, agent thinking, errors, etc.)
                 await self._handle_event(json.loads(message))
 
     async def _forward_audio_to_twilio(self, audio_bytes: bytes):
-        """Send TTS audio back to Twilio over its media WebSocket."""
-        # UPDATE: Make sure we have the streamSid before sending audio
         if not self.stream_sid:
             return 
 
         payload = base64.b64encode(audio_bytes).decode("utf-8")
         media_msg = {
             "event": "media",
-            "streamSid": self.stream_sid,  # REQUIRED BY TWILIO
+            "streamSid": self.stream_sid,
             "media": {"payload": payload},
         }
         try:
@@ -190,13 +183,12 @@ class DeepgramVoiceAgent:
             print(f"[DG AGENT] Error: {event}")
 
     async def _send_twilio_clear(self):
-        """Tell Twilio to discard any buffered audio (barge-in support)."""
         if not self.stream_sid:
             return
 
         clear_msg = {
             "event": "clear",
-            "streamSid": self.stream_sid # REQUIRED BY TWILIO
+            "streamSid": self.stream_sid
         }
         try:
             await self.twilio_ws.send_text(json.dumps(clear_msg))
