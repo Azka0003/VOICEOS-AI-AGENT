@@ -4,7 +4,6 @@ import asyncio
 import secrets
 from datetime import datetime, timezone
 
-# Ensure the data directory exists
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 LINEAGE_LOG_PATH = os.path.join(DATA_DIR, "lineage_log.json")
 
@@ -14,235 +13,310 @@ if not os.path.exists(LINEAGE_LOG_PATH):
         json.dump([], f)
 
 
-class HITLManager:
-    """
-    Smart Human-in-the-Loop (HITL) Manager for DebtPilot.
-    Pauses agent execution only when specific thresholds or logic conditions are met.
-    """
+def get_days_since_last_contact(comms_history: list) -> float | None:
+    if not comms_history:
+        return None
+    latest = None
+    for c in comms_history:
+        if "timestamp" in c:
+            try:
+                dt = datetime.fromisoformat(c["timestamp"].replace("Z", "+00:00"))
+                if latest is None or dt > latest:
+                    latest = dt
+            except ValueError:
+                pass
+    if latest:
+        return (datetime.now(timezone.utc) - latest).total_seconds() / 86400.0
+    return None
 
+
+def compute_confidence(invoice: dict, comms_history: list, planned_action: str) -> float:
+    score = 1.0
+
+    if not invoice.get("contact_name"):
+        score -= 0.4
+
+    if invoice.get("dispute_flag"):
+        score -= 0.35
+
+    if invoice.get("days_overdue", 0) > 60 and invoice.get("risk_score", 100) < 40:
+        score -= 0.45
+
+    if invoice.get("amount", 0) > 50000 and invoice.get("days_overdue", 0) > 45:
+        score -= 0.2
+
+    days_since_last_contact = get_days_since_last_contact(comms_history)
+    if days_since_last_contact is not None and days_since_last_contact < 3:
+        score -= 0.25
+
+    return max(0.0, round(score, 2))
+
+
+class HITLManager:
     def __init__(self):
         self.pending_actions = {}
-        self.events = {}  # Keeps asyncio.Events separate from serializable data
-        
-        # Internal stats tracking
-        self.stats = {
-            "total_triggered": 0,
-            "total_resolved": 0,
-            "total_pending": 0,
-            "total_resolve_time_seconds": 0.0,
-            "auto_proceeded": 0
-        }
+        self.events = {}
 
-    def should_pause(self, context: dict) -> tuple[bool, str | None]:
-        """
-        Evaluates strict business logic to determine if a human is needed.
-        Returns (True, reason) if HITL is required, otherwise (False, None).
-        Evaluates exactly in the order specified.
-        """
-        client = context.get("client", "Unknown Client")
-        contact_name = context.get("contact_name")
-        risk_score = context.get("risk_score", 0)
-        amount = context.get("amount", 0)
-        days_overdue = context.get("days_overdue", 0)
-        invoice_id = context.get("invoice_id", "Unknown")
-        dispute_flag = context.get("dispute_flag", False)
-        email_tone = context.get("email_tone", "")
-        prior_human_reviews = context.get("prior_human_reviews", 0)
-
-        # CONDITION 1 — Missing Contact
-        if contact_name is None or str(contact_name).strip() == "":
-            reason = (
-                f"Contact person is missing for {client}. Cannot proceed "
-                f"without a verified recipient. Invoice: {invoice_id}, "
-                f"Amount: ₹{amount}, Days Overdue: {days_overdue}"
-            )
-            return True, reason
-
-        # CONDITION 2 — High Risk Score
-        if risk_score >= 71:
-            payment_history = context.get("payment_history",[])
-            history_summary = ", ".join(payment_history) if payment_history else "No history available"
-            dispute_str = "yes" if dispute_flag else "no"
-            reason = (
-                f"Client {client} has a HIGH risk score ({risk_score}/100). "
-                f"History: {history_summary}. Dispute on file: {dispute_str}. "
-                f"Recommend human review before contact."
-            )
-            return True, reason
-
-        # CONDITION 3 — Large Amount + Significantly Overdue
-        if amount > 50000 and days_overdue > 30:
-            reason = (
-                f"Invoice {invoice_id} for ₹{amount} is {days_overdue} days "
-                f"overdue. Amount exceeds ₹50,000 threshold. Human sign-off "
-                f"required before automated contact."
-            )
-            return True, reason
-
-        # CONDITION 4 — Dispute Flag Active
-        if dispute_flag is True:
-            reason = (
-                f"Active dispute flag on {client} account. Automated contact "
-                f"during a live dispute could create legal liability. Human "
-                f"must review before any communication."
-            )
-            return True, reason
-
-        # CONDITION 5 — Final Notice Tone on First Automated Run
-        if email_tone == "final_notice" and prior_human_reviews == 0:
-            reason = (
-                "This would be a Final Notice email but no human has "
-                "reviewed this client before. First Final Notice requires "
-                "human approval."
-            )
-            return True, reason
-
-        # No conditions met; agent can proceed safely
-        self.stats["auto_proceeded"] += 1
-        return False, None
-
-    async def wait_for_human(self, checkpoint_type: str, context: dict, reason: str) -> dict:
-        """
-        Creates a pending checkpoint, suspends the caller via asyncio.Event,
-        and returns the human response once resolved.
-        """
-        # 1. Generate unique checkpoint ID
-        checkpoint_id = f"HITL-{checkpoint_type.upper()}-{secrets.token_hex(3)}"
-
-        # Determine System Confidence
-        risk_score = context.get("risk_score", 0)
-        if risk_score > 70:
-            confidence = "low"
-        elif 41 <= risk_score <= 70:
-            confidence = "medium"
-        else:
-            confidence = "high"
-
-        # Determine Suggested Action based on the context/reason
-        if "Contact person is missing" in reason:
-            suggested_action = "Locate contact details and provide below"
-        elif "HIGH risk score" in reason:
-            suggested_action = "Review client history and approve or escalate"
-        elif "Amount exceeds" in reason:
-            suggested_action = "Confirm automated contact is appropriate"
-        elif "Active dispute" in reason:
-            suggested_action = "Check with legal team before proceeding"
-        elif "Final Notice" in reason:
-            suggested_action = "Review and approve final notice"
-        else:
-            suggested_action = "Review and provide response"
-
-        # 2. Create checkpoint record
-        record = {
-            "id": checkpoint_id,
-            "type": checkpoint_type,
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "context": context,
-            "reason": reason,
-            "confidence": confidence,
-            "suggested_action": suggested_action,
-            "response": None,
-            "resolved_at": None
-        }
-
-        # 3. Store checkpoint and event
-        self.pending_actions[checkpoint_id] = record
-        self.events[checkpoint_id] = asyncio.Event()
-
-        self.stats["total_triggered"] += 1
-        self.stats["total_pending"] += 1
-
-        print(f"[HITL] Checkpoint created: {checkpoint_id} | Reason: {reason}")
-
-        # 4. Wait for human intervention
-        await self.events[checkpoint_id].wait()
-
-        # 5. Return human's response
-        return self.pending_actions[checkpoint_id]["response"]
-
-    def resolve_checkpoint(self, checkpoint_id: str, response: dict):
-        """
-        Resolves a pending checkpoint, logs the decision, and wakes up the sleeping agent.
-        """
-        if checkpoint_id not in self.pending_actions:
-            print(f"[HITL] Warning: Cannot resolve unknown checkpoint {checkpoint_id}")
-            return
-
-        record = self.pending_actions[checkpoint_id]
-        if record["status"] == "resolved":
-            return
-
-        now = datetime.now(timezone.utc)
-        created_at = datetime.fromisoformat(record["created_at"])
-        time_to_resolve_seconds = (now - created_at).total_seconds()
-
-        # 1-3. Merge response and resolve status
-        record["status"] = "resolved"
-        record["resolved_at"] = now.isoformat()
-        record["response"] = response
-
-        # 4. Increment human review counter
-        record["context"]["prior_human_reviews"] = record["context"].get("prior_human_reviews", 0) + 1
-
-        # Update stats
-        self.stats["total_pending"] -= 1
-        self.stats["total_resolved"] += 1
-        self.stats["total_resolve_time_seconds"] += time_to_resolve_seconds
-
-        # 6. Log entry to lineage tracker safely
-        log_entry = {
-            "timestamp": now.isoformat(),
-            "agent": "hitl_manager",
-            "action": "checkpoint_resolved",
-            "checkpoint_id": checkpoint_id,
-            "reason_paused": record["reason"],
-            "human_response": response,
-            "time_to_resolve_seconds": time_to_resolve_seconds,
-            "hitl_triggered": True,
-            "hitl_reason": record["reason"]
-        }
-
+    def _log_lineage(self, entry: dict):
         try:
             with open(LINEAGE_LOG_PATH, "r") as f:
                 logs = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            logs =[]
-
-        logs.append(log_entry)
-
+            logs = []
+        if "timestamp" not in entry:
+            entry = {"timestamp": datetime.now(timezone.utc).isoformat(), **entry}
+        logs.append(entry)
         with open(LINEAGE_LOG_PATH, "w") as f:
             json.dump(logs, f, indent=2)
 
-        print(f"[HITL] Checkpoint resolved: {checkpoint_id} in {time_to_resolve_seconds:.1f}s")
+    async def evaluate_and_wait(self, invoice: dict, comms_history: list, planned_action: str) -> dict:
+        confidence = compute_confidence(invoice, comms_history, planned_action)
 
-        # 5. Unblock the waiting task
+        client       = invoice.get("client", "Unknown Client")
+        amount       = invoice.get("amount", 0)
+        days_overdue = invoice.get("days_overdue", 0)
+        risk_score   = invoice.get("risk_score", 50)
+        contact_name = (invoice.get("contact_name") or "").strip()
+        contact_phone= invoice.get("contact_phone", "")
+        dispute_flag = invoice.get("dispute_flag", False)
+        next_action_excel = invoice.get("next_action", "")
+        invoice_id   = invoice.get("invoice_id", "Unknown")
+        risk_label   = invoice.get("risk_label", "High" if risk_score > 70 else "Low" if risk_score < 40 else "Medium")
+
+        action_lower  = planned_action.lower()
+        is_email      = "email" in action_lower
+        is_call       = "call" in action_lower
+        is_aggressive = any(t in action_lower for t in ["aggressive", "final notice", "final_notice", "escalated"])
+
+        amount_str = f"₹{amount:,.0f}" if amount else "₹0"
+
+        # FIX: generic_terms no longer includes "" — empty string meant every
+        # client with a missing name triggered MISSING_CONTACT even when
+        # ChromaDB simply hadn't loaded yet. Now we only trigger when the name
+        # is truly absent (None / empty after strip).
+        GENERIC_TERMS = {"accounts", "finance team", "admin", "billing", "info"}
+        is_generic = contact_name.lower() in GENERIC_TERMS
+        is_missing  = not contact_name  # empty string or None
+
+        triggered     = False
+        scenario_code = None
+        reason        = None
+
+        # SCENARIO 1: Contact person is missing or a known generic placeholder
+        if is_missing or is_generic:
+            triggered     = True
+            scenario_code = "MISSING_CONTACT"
+            reason = (
+                f"Cannot confirm decision-maker at {client}. "
+                f"Invoice {amount_str}, {days_overdue} days overdue. "
+                f"Sending to a generic inbox risks non-delivery to an authorised person. "
+                f"Please confirm the contact name before proceeding."
+            )
+
+        # SCENARIO 2: High-value + long overdue
+        elif amount > 50000 and days_overdue > 45:
+            triggered     = True
+            scenario_code = "HIGH_STAKES_OVERDUE"
+            reason = (
+                f"High-value invoice ({amount_str}) at {days_overdue} days overdue for {client}. "
+                f"Risk score: {risk_score} ({risk_label}). "
+                f"Recommend human review of tone before sending."
+            )
+
+        # SCENARIO 3: Active dispute + aggressive action
+        elif dispute_flag and (is_email or is_call) and is_aggressive:
+            triggered     = True
+            scenario_code = "ACTIVE_DISPUTE"
+            reason = (
+                f"{client} has an active dispute on {invoice_id}. "
+                f"Sending escalated communication during an unresolved dispute could "
+                f"create legal liability. Human must confirm dispute is resolved first."
+            )
+
+        else:
+            days_since_last = get_days_since_last_contact(comms_history)
+
+            # SCENARIO 4: Contacted too recently
+            if days_since_last is not None and days_since_last < 3 and is_email:
+                triggered     = True
+                scenario_code = "CONTACT_HISTORY_CONFLICT"
+                last_ts = comms_history[-1].get("timestamp", "unknown") if comms_history else "unknown"
+                reason = (
+                    f"A message was already sent to {client} {int(days_since_last)} day(s) ago "
+                    f"(timestamp: {last_ts}). Sending again this quickly may damage deliverability "
+                    f"and client relationship. Confirm whether to proceed or wait."
+                )
+
+            # SCENARIO 5: Phone number is a known demo/test number shared across clients
+            # FIX: Removed the hard-coded "+919634143593 belongs to Raj Traders" check.
+            # In the demo dataset every client shares one phone number — that is intentional
+            # per the architecture doc ("all clients share one phone number"). This scenario
+            # should only fire when the number is literally a placeholder like 0000000000.
+            elif contact_phone in ("0000000000", "1234567890", "9999999999", ""):
+                triggered     = True
+                scenario_code = "DATA_ERROR_PHONE"
+                reason = (
+                    f"Phone number for {client} appears to be a placeholder ({contact_phone}). "
+                    f"Proceeding would call an invalid number. Human must correct it first."
+                )
+
+            # SCENARIO 6: Excel says legal but agent about to email/call
+            elif "legal" in str(next_action_excel).lower() and (is_email or is_call):
+                triggered     = True
+                scenario_code = "LEGAL_ESCALATION_CONFLICT"
+                reason = (
+                    f"{client} has already been flagged for legal escalation in Excel. "
+                    f"Sending a routine message would contradict that status and may interfere "
+                    f"with legal proceedings. Human must confirm whether to override."
+                )
+
+            # SCENARIO 7: Contradictory risk score
+            elif days_overdue > 60 and risk_score < 40:
+                triggered     = True
+                scenario_code = "CONTRADICTORY_RISK_SCORE"
+                reason = (
+                    f"Data inconsistency for {client}: {days_overdue} days overdue but risk "
+                    f"score is {risk_score} (Low). Risk score may be stale. Human must trigger "
+                    f"a recalculation or manually confirm the correct tone."
+                )
+
+        # Meta-check: low confidence fallback
+        if not triggered and confidence < 0.5:
+            triggered     = True
+            scenario_code = "LOW_CONFIDENCE_FALLBACK"
+            reason = (
+                f"System confidence fell below threshold (score: {confidence}). "
+                f"Manual review required."
+            )
+
+        # Auto-proceed
+        if not triggered:
+            self._log_lineage({
+                "hitl_triggered": False,
+                "hitl_evaluated": True,
+                "confidence": confidence,
+                "client": client,
+                "reason_not_triggered": "All conditions clear."
+            })
+            return {"option_id": "auto_proceed"}
+
+        # Build checkpoint
+        checkpoint_id = f"hitl_{client.lower().replace(' ', '_')}_{secrets.token_hex(3)}"
+
+        last_contact = comms_history[-1] if comms_history else {}
+        comms_summary = {
+            "total_contacts": len(comms_history),
+            "last_contact_type": last_contact.get("type", "none"),
+            "last_contact_date": last_contact.get("timestamp"),
+            "last_tone": last_contact.get("tone", "none")
+        }
+
+        checkpoint = {
+            "checkpoint_id": checkpoint_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "trigger": {
+                "scenario_code": scenario_code,
+                "human_readable_reason": reason,
+                "confidence_before_pause": confidence,
+                "would_have_done": planned_action
+            },
+            "invoice_context": {
+                "client": client,
+                "invoice_id": invoice_id,
+                "amount": amount,
+                "days_overdue": days_overdue,
+                "risk_score": risk_score,
+                "risk_label": risk_label,
+                "dispute_flag": dispute_flag,
+                "contact_name": contact_name or None,
+                "contact_email": invoice.get("contact_email")
+            },
+            "comms_history_summary": comms_summary,
+            "options_for_human": [
+                {
+                    "option_id": "provide_contact",
+                    "label": "Provide correct contact name and proceed",
+                    "requires_input": {"contact_name": "string"}
+                },
+                {
+                    "option_id": "proceed_anyway",
+                    "label": "Proceed anyway, accept the risk",
+                    "requires_input": None
+                },
+                {
+                    "option_id": "skip",
+                    "label": "Skip this client for now, revisit in 2 days",
+                    "requires_input": None
+                },
+                {
+                    "option_id": "cancel",
+                    "label": "Cancel this action entirely",
+                    "requires_input": None
+                }
+            ],
+            "resolution": None,
+            "resolved_at": None,
+            "resolved_by": "human"
+        }
+
+        self.pending_actions[checkpoint_id] = checkpoint
+        self.events[checkpoint_id] = asyncio.Event()
+
+        self._log_lineage({
+            "agent": "hitl_manager",
+            "action": "HITL checkpoint created",
+            "hitl_triggered": True,
+            "hitl_scenario": scenario_code,
+            "confidence": confidence,
+            "checkpoint_id": checkpoint_id
+        })
+
+        print(f"\n[HITL PAUSED] Confidence: {confidence} | Scenario: {scenario_code}\n[REASON] {reason}\n")
+
+        await self.events[checkpoint_id].wait()
+        return self.pending_actions[checkpoint_id]["resolution"]
+
+    def resolve_checkpoint(self, checkpoint_id: str, resolution_data: dict):
+        if checkpoint_id not in self.pending_actions:
+            print(f"[HITL] Warning: unknown checkpoint {checkpoint_id}")
+            return
+
+        checkpoint = self.pending_actions[checkpoint_id]
+        if checkpoint["status"] == "resolved":
+            return
+
+        checkpoint["status"]      = "resolved"
+        checkpoint["resolution"]  = resolution_data
+        checkpoint["resolved_at"] = datetime.now(timezone.utc).isoformat()
+        checkpoint["resolved_by"] = "human"
+
+        client    = checkpoint["invoice_context"]["client"]
+        option_id = resolution_data.get("option_id")
+
+        if option_id == "provide_contact":
+            new_contact = resolution_data.get("inputs", {}).get("contact_name", "Unknown")
+            print(f"[HITL] {client} → contact set to '{new_contact}'. Resuming.")
+        elif option_id == "proceed_anyway":
+            print(f"[HITL] {client} → human override. Resuming.")
+            self._log_lineage({"agent": "hitl_manager", "action": "human_override", "checkpoint_id": checkpoint_id})
+        elif option_id == "skip":
+            print(f"[HITL] {client} → skipped.")
+        elif option_id == "cancel":
+            print(f"[HITL] {client} → cancelled.")
+
+        self._log_lineage({
+            "agent": "hitl_manager",
+            "action": "HITL checkpoint resolved",
+            "checkpoint_id": checkpoint_id,
+            "resolution": resolution_data
+        })
+
         if checkpoint_id in self.events:
             self.events[checkpoint_id].set()
 
     def get_all_pending(self) -> list:
-        """Returns a list of all currently pending checkpoints (without asyncio Events)."""
-        return[
-            record for record in self.pending_actions.values() 
-            if record["status"] == "pending"
-        ]
+        return [r for r in self.pending_actions.values() if r["status"] == "pending"]
 
-    def get_checkpoint(self, checkpoint_id: str) -> dict | None:
-        """Returns a single checkpoint."""
-        return self.pending_actions.get(checkpoint_id)
 
-    def get_stats(self) -> dict:
-        """Returns statistics on HITL activity."""
-        total_res = self.stats["total_resolved"]
-        avg_time = self.stats["total_resolve_time_seconds"] / total_res if total_res > 0 else 0.0
-        
-        return {
-            "total_triggered": self.stats["total_triggered"],
-            "total_resolved": total_res,
-            "total_pending": self.stats["total_pending"],
-            "avg_resolve_time_seconds": avg_time,
-            "auto_proceeded": self.stats["auto_proceeded"]
-        }
-
-# Singleton instance exported for use across the application
 hitl_manager = HITLManager()

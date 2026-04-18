@@ -10,3 +10,4 @@ langchain-groq
 requests
 langchain-community
 langchain-core
+contextlib

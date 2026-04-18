@@ -2,7 +2,7 @@ import os
 import json
 import base64
 import asyncio
-from urllib.parse import quote # Added for URL encoding
+from urllib.parse import quote
 from fastapi import FastAPI, WebSocket, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -11,9 +11,9 @@ from tools.twilio_tool import twilio_tool
 from tools.deepgram_tool import DeepgramVoiceAgent
 from tools.hitl_tool import hitl_manager
 from tools.llm_router import llm_router
-
-# UPDATE: Import the InvoiceAgent to fetch real data
 from agents.invoice_agent import InvoiceAgent
+from startup import seed_chromadb
+from contextlib import asynccontextmanager
 
 load_dotenv()
 
@@ -27,8 +27,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    seed_chromadb()
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
 @app.get("/call/start")
 async def start_call(to_number: str, client_name: str):
+    # 1. Prepare initial components
     script_prompt = f"Generate a 1-sentence greeting for {client_name} about an overdue invoice."
     script = llm_router.invoke(
         prompt=script_prompt,
@@ -36,18 +44,39 @@ async def start_call(to_number: str, client_name: str):
         agent_name="main_api"
     )
 
-    approval = await hitl_manager.wait_for_human(
-        checkpoint_type="call_approval", 
-        context={"client": client_name, "script": script},
-        reason=f"Manual API call trigger requested for {client_name}. Review script before dialing."
-    )
-
-    if not approval or not approval.get("approved"):
-        return {"status": "cancelled"}
-
-    base_url = os.getenv("BASE_URL")
+    # 2. Fetch real data from Invoice Agent to feed HITL Context
+    inv_agent = InvoiceAgent()
+    client_data = inv_agent.get_client_data(client_name) or {}
     
-    # UPDATE: Pass client_name safely to Twilio so Twilio sends it back to us
+    invoice_context = {
+        "client": client_name,
+        "invoice_id": client_data.get("latest_invoice_id", "INV_UNKNOWN"),
+        "amount": client_data.get("total_due", 0),
+        "days_overdue": client_data.get("max_days_overdue", 0),
+        "risk_score": client_data.get("risk_score", 50),
+        "dispute_flag": client_data.get("dispute_flag", False),
+        "contact_name": client_data.get("contact_info", {}).get("name", ""),
+        "contact_phone": to_number,
+        "contact_email": client_data.get("contact_info", {}).get("email", ""),
+        "next_action": client_data.get("next_action", "")
+    }
+    comms_history = client_data.get("comms_history", [])
+    
+    # 3. Simulate the requested 'planned_action' string format to match compute_confidence checks
+    planned_action = f"Call {to_number} to execute friendly_reminder script: {script}"
+
+    # 4. Smart HITL Evaluation
+    resolution = await hitl_manager.evaluate_and_wait(invoice_context, comms_history, planned_action)
+
+    # 5. Handle Negative Resolution Choices
+    if resolution and resolution.get("option_id") in ["skip", "cancel"]:
+        return {
+            "status": "cancelled", 
+            "reason": f"Action stopped by human. Decision: {resolution.get('option_id')}"
+        }
+
+    # 6. Execute Twilio Dial
+    base_url = os.getenv("BASE_URL")
     safe_client = quote(client_name)
     twiml_url = f"{base_url}/call/twiml-initial?client_name={safe_client}"
     
@@ -55,13 +84,11 @@ async def start_call(to_number: str, client_name: str):
 
     return {"status": "calling", "call_sid": call_sid}
 
-# UPDATE: Accept client_name from Twilio
 @app.post("/call/twiml-initial")
 async def twiml_initial(client_name: str = ""):
-    domain = os.getenv("BASE_URL").replace("https://", "").replace("http://", "")
+    domain = os.getenv("BASE_URL", "").replace("https://", "").replace("http://", "")
     safe_client = quote(client_name)
     
-    # UPDATE: Pass client_name to the WebSocket URL
     response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
@@ -70,7 +97,6 @@ async def twiml_initial(client_name: str = ""):
 </Response>"""
     return Response(content=response_xml, media_type="application/xml")
 
-# UPDATE: Accept client_name in the WebSocket
 @app.websocket("/twilio-stream")
 async def websocket_endpoint(websocket: WebSocket, client_name: str = ""):
     await websocket.accept()
@@ -79,11 +105,10 @@ async def websocket_endpoint(websocket: WebSocket, client_name: str = ""):
     inv_agent = InvoiceAgent()
     client_data = inv_agent.get_client_data(client_name)
 
-    # Build the prompt dynamically
     if client_data:
-        total_due = client_data['total_due']
-        days_overdue = client_data['max_days_overdue']
-        contact = client_data['contact_info']['name'] or "Sir/Madam"
+        total_due = client_data.get('total_due', 0)
+        days_overdue = client_data.get('max_days_overdue', 0)
+        contact = client_data.get('contact_info', {}).get('name') or "Sir/Madam"
         
         system_prompt = (
             f"You are DebtPilot, an AI payment assistant calling from an Indian firm. "
@@ -98,14 +123,12 @@ async def websocket_endpoint(websocket: WebSocket, client_name: str = ""):
         system_prompt = "You are a professional voice assistant on a phone call. Keep responses short."
         greeting = "Hello, how can I help you today?"
 
-    # Inject the knowledge directly into the agent
     agent = DeepgramVoiceAgent(
         twilio_ws=websocket,
         system_prompt=system_prompt,
         greeting=greeting
     )
 
-    # Run Deepgram Voice Agent in background
     agent_task = asyncio.create_task(agent.run())
 
     try:
@@ -139,6 +162,7 @@ async def websocket_endpoint(websocket: WebSocket, client_name: str = ""):
         except asyncio.CancelledError:
             pass
 
+# --- HITL Endpoints ---
 @app.get("/hitl/pending")
 async def get_pending():
     return hitl_manager.get_all_pending()

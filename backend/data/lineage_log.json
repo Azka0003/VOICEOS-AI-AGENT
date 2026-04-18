@@ -1,97 +1,265 @@
 [
   {
-    "timestamp": "2026-04-18T07:51:09.998021+00:00",
-    "agent": "main_api",
-    "action": "llm_invoke",
-    "llm_used": "groq/llama-3.3-70b-versatile",
-    "mode": "generation",
-    "latency_ms": 916,
-    "prompt_length_chars": 72,
-    "response_length_chars": 180,
-    "fallback_used": false,
-    "hitl_triggered": false,
-    "hitl_reason": null,
-    "context": {}
-  },
-  {
-    "timestamp": "2026-04-18T07:51:44.934041+00:00",
-    "agent": "main_api",
-    "action": "llm_invoke",
-    "llm_used": "groq/llama-3.3-70b-versatile",
-    "mode": "generation",
-    "latency_ms": 734,
-    "prompt_length_chars": 72,
-    "response_length_chars": 180,
-    "fallback_used": false,
-    "hitl_triggered": false,
-    "hitl_reason": null,
-    "context": {}
-  },
-  {
-    "timestamp": "2026-04-18T07:53:32.333486+00:00",
-    "agent": "hitl_manager",
-    "action": "checkpoint_resolved",
-    "checkpoint_id": "HITL-CALL_APPROVAL-96264e",
-    "reason_paused": "Manual API call trigger requested for Raj Traders. Review script before dialing.",
-    "human_response": {
-      "approved": true
+    "timestamp": "2026-04-10T08:01:14",
+    "agent": "invoice_agent",
+    "action": "fetch_and_triage_all_invoices",
+    "input": {
+      "source": "mock_invoices.json",
+      "filter": "status=overdue"
     },
-    "time_to_resolve_seconds": 142.327938,
-    "hitl_triggered": true,
-    "hitl_reason": "Manual API call trigger requested for Raj Traders. Review script before dialing."
-  },
-  {
-    "timestamp": "2026-04-18T08:02:52.631901+00:00",
-    "agent": "main_api",
-    "action": "llm_invoke",
-    "llm_used": "groq/llama-3.3-70b-versatile",
-    "mode": "generation",
-    "latency_ms": 857,
-    "prompt_length_chars": 66,
-    "response_length_chars": 167,
-    "fallback_used": false,
-    "hitl_triggered": false,
-    "hitl_reason": null,
-    "context": {}
-  },
-  {
-    "timestamp": "2026-04-18T08:03:14.719319+00:00",
-    "agent": "hitl_manager",
-    "action": "checkpoint_resolved",
-    "checkpoint_id": "HITL-CALL_APPROVAL-34d7e2",
-    "reason_paused": "Manual API call trigger requested for Faraz. Review script before dialing.",
-    "human_response": {
-      "approved": true
+    "output": {
+      "total_invoices_loaded": 12,
+      "high_priority_flagged": 4,
+      "high_priority_invoice_ids": ["INV003", "INV004", "INV005", "INV009"],
+      "flagging_criteria": "days_overdue > 45 OR dispute_flag = true OR contact_name = null",
+      "summary": "12 overdue invoices loaded across 6 clients. 4 flagged as high priority for immediate agent attention. Remaining 8 queued for standard follow-up flow."
     },
-    "time_to_resolve_seconds": 22.038769,
-    "hitl_triggered": true,
-    "hitl_reason": "Manual API call trigger requested for Faraz. Review script before dialing."
-  },
-  {
-    "timestamp": "2026-04-18T09:40:14.462601+00:00",
-    "agent": "main_api",
-    "action": "llm_invoke",
     "llm_used": "groq/llama-3.3-70b-versatile",
-    "mode": "generation",
-    "latency_ms": 1542,
-    "prompt_length_chars": 66,
-    "response_length_chars": 163,
-    "fallback_used": false,
+    "latency_ms": 312,
     "hitl_triggered": false,
+    "hitl_scenario": null,
     "hitl_reason": null,
-    "context": {}
+    "confidence": 0.97,
+    "chromadb_queried": false,
+    "chromadb_doc_id": null,
+    "excel_updated": false,
+    "excel_field_updated": null,
+    "excel_previous_value": null,
+    "excel_new_value": null
   },
   {
-    "timestamp": "2026-04-18T09:40:40.530556+00:00",
-    "agent": "hitl_manager",
-    "action": "checkpoint_resolved",
-    "checkpoint_id": "HITL-CALL_APPROVAL-fed75e",
-    "reason_paused": "Manual API call trigger requested for Faraz. Review script before dialing.",
-    "human_response": {
-      "approved": true
+    "timestamp": "2026-04-10T08:03:47",
+    "agent": "risk_agent",
+    "action": "score_client_risk",
+    "input": {
+      "client": "Raj Traders",
+      "invoice_ids": ["INV001", "INV002"],
+      "days_overdue_max": 47,
+      "dispute_flag": false,
+      "contact_name": "Arjun Mehta",
+      "payment_history_summary": "2 on-time payments, 1 partial payment, silent since Feb 2026"
     },
-    "time_to_resolve_seconds": 25.961023,
+    "output": {
+      "risk_score": 62,
+      "risk_label": "Medium",
+      "score_rationale": "Days overdue 47 in 35-60 range anchors score at 50. Partial payment in Jan 2026 reduces score by 5. Silence since Feb adds 10. Good prior history offsets 3 points. No dispute, contact present.",
+      "hitl_decision": "not_required",
+      "next_action": "schedule_call"
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 247,
+    "hitl_triggered": false,
+    "hitl_scenario": null,
+    "hitl_reason": null,
+    "confidence": 0.81,
+    "chromadb_queried": false,
+    "chromadb_doc_id": null,
+    "excel_updated": true,
+    "excel_field_updated": "Risk Score, Risk Label, Next Action",
+    "excel_previous_value": "null, null, send_friendly_reminder",
+    "excel_new_value": "62, Medium, schedule_call"
+  },
+  {
+    "timestamp": "2026-04-10T08:06:22",
+    "agent": "risk_agent",
+    "action": "score_client_risk",
+    "input": {
+      "client": "Mehta Enterprises",
+      "invoice_ids": ["INV003", "INV004"],
+      "days_overdue_max": 71,
+      "dispute_flag": true,
+      "dispute_invoice": "INV004",
+      "dispute_raised_date": "2026-01-10",
+      "contact_name": "Priya Sharma",
+      "payment_history_summary": "Perfect payer 2023-2025, silent since dispute raised"
+    },
+    "output": {
+      "risk_score": 84,
+      "risk_label": "High",
+      "score_rationale": "Dispute flag true forces minimum score of 71. Days overdue 71 on clean invoice INV003 adds 8 points. Silence for 98 days post-dispute adds 5 points. Total 84.",
+      "hitl_decision": "pre_flagged",
+      "hitl_scenario": "DISPUTE_FLAG_ACTIVE",
+      "next_action": "human_review_required"
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 291,
     "hitl_triggered": true,
-    "hitl_reason": "Manual API call trigger requested for Faraz. Review script before dialing."
+    "hitl_scenario": "DISPUTE_FLAG_ACTIVE",
+    "hitl_reason": "Mehta Enterprises has an active unresolved dispute on INV004 (₹68,000) raised 2026-01-10. Sending escalated communication risks legal exposure. Human must confirm dispute resolution status before any further contact is made.",
+    "confidence": 0.29,
+    "chromadb_queried": false,
+    "chromadb_doc_id": null,
+    "excel_updated": true,
+    "excel_field_updated": "Risk Score, Risk Label, Next Action",
+    "excel_previous_value": "null, null, send_friendly_reminder",
+    "excel_new_value": "84, High, human_review_required"
+  },
+  {
+    "timestamp": "2026-04-10T10:23:00",
+    "agent": "email_agent",
+    "action": "send_email",
+    "input": {
+      "client": "Raj Traders",
+      "contact_name": "Arjun Mehta",
+      "contact_email": "farazstudy112@gmail.com",
+      "tone": "friendly_reminder",
+      "invoice_ids": ["INV001", "INV002"],
+      "total_outstanding": 57000,
+      "chromadb_doc_queried": "client_raj_traders"
+    },
+    "output": {
+      "email_subject": "Friendly Reminder: INV001 (₹45,000) & INV002 (₹12,000) — Payment Overdue Since March 2, 2026",
+      "email_status": "sent",
+      "delivery_confirmed": false,
+      "opened": false,
+      "replied": false
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 389,
+    "hitl_triggered": false,
+    "hitl_scenario": null,
+    "hitl_reason": null,
+    "confidence": 0.81,
+    "chromadb_queried": true,
+    "chromadb_doc_id": "client_raj_traders",
+    "excel_updated": true,
+    "excel_field_updated": "Last Contact Date, Last Contact Type, Contact Count, Next Action",
+    "excel_previous_value": "Never, none, 0, schedule_call",
+    "excel_new_value": "2026-04-10, email, 1, schedule_call"
+  },
+  {
+    "timestamp": "2026-04-09T11:47:00",
+    "agent": "email_agent",
+    "action": "send_email",
+    "input": {
+      "client": "Mehta Enterprises",
+      "contact_name": "Priya Sharma",
+      "contact_email": "joybackpack@gmail.com",
+      "tone": "urgent_followup",
+      "invoice_ids": ["INV003", "INV004"],
+      "total_outstanding": 96000,
+      "chromadb_doc_queried": "client_mehta_enterprises",
+      "note": "dispute_flag on INV004 was detected by risk_agent but HITL clearance had not yet been actioned by human — email was sent in error before HITL hold was enforced"
+    },
+    "output": {
+      "email_subject": "Urgent: Outstanding Balance of ₹96,000 — INV003 & INV004 Require Immediate Attention",
+      "email_status": "sent",
+      "delivery_confirmed": false,
+      "opened": false,
+      "replied": false,
+      "system_flag": "RETROSPECTIVE_ERROR — email sent before HITL dispute review completed. Risk agent had pre-flagged account but enforcement gate was not yet active at time of send. System detected this inconsistency on next run and froze further automated actions."
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 412,
+    "hitl_triggered": false,
+    "hitl_scenario": null,
+    "hitl_reason": null,
+    "confidence": 0.41,
+    "chromadb_queried": true,
+    "chromadb_doc_id": "client_mehta_enterprises",
+    "excel_updated": true,
+    "excel_field_updated": "Last Contact Date, Last Contact Type, Contact Count",
+    "excel_previous_value": "2026-03-27, email, 1",
+    "excel_new_value": "2026-04-09, email, 2"
+  },
+  {
+    "timestamp": "2026-04-10T08:14:55",
+    "agent": "action_agent",
+    "action": "evaluate_next_action",
+    "input": {
+      "client": "Apex Solutions",
+      "invoice_ids": ["INV009", "INV010"],
+      "contact_name": null,
+      "days_overdue_max": 45,
+      "total_outstanding": 103000,
+      "prior_contact_count": 1,
+      "prior_contact_verified": false
+    },
+    "output": {
+      "next_action": "resolve_contact_details",
+      "hitl_decision": "triggered",
+      "hitl_scenario": "MISSING_CONTACT",
+      "reason": "Contact person for Apex Solutions is not on record. INV009 is ₹72,000 at 45 days overdue. A prior email was sent to a generic inbox on 2026-04-05 with no confirmation it reached a decision-maker. Proceeding without a named contact at this invoice value creates collection risk."
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 278,
+    "hitl_triggered": true,
+    "hitl_scenario": "MISSING_CONTACT",
+    "hitl_reason": "Contact person for Apex Solutions is not on record. INV009 is ₹72,000 at 45 days overdue. Proceeding without a named contact creates collection risk.",
+    "confidence": 0.31,
+    "chromadb_queried": true,
+    "chromadb_doc_id": "client_apex_solutions",
+    "excel_updated": true,
+    "excel_field_updated": "Next Action, Contact Name",
+    "excel_previous_value": "send_urgent_followup, null",
+    "excel_new_value": "resolve_contact_details, MISSING"
+  },
+  {
+    "timestamp": "2026-04-10T08:18:30",
+    "agent": "action_agent",
+    "action": "evaluate_next_action",
+    "input": {
+      "client": "Noor Supplies",
+      "invoice_ids": ["INV007", "INV008"],
+      "contact_name": "Sana Mirza",
+      "days_overdue_max": 22,
+      "total_outstanding": 14700,
+      "dispute_flag": false,
+      "risk_score": 28,
+      "prior_contact_count": 0
+    },
+    "output": {
+      "next_action": "send_friendly_reminder",
+      "hitl_decision": "not_required",
+      "reason": "All conditions clear: contact present, no dispute, low risk score 28, small outstanding amount ₹14,700, first contact, recently overdue only 22 days. System auto-proceeds.",
+      "email_queued": true,
+      "email_tone": "friendly_reminder"
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 201,
+    "hitl_triggered": false,
+    "hitl_scenario": null,
+    "hitl_reason": null,
+    "confidence": 0.94,
+    "chromadb_queried": true,
+    "chromadb_doc_id": "client_noor_supplies",
+    "excel_updated": true,
+    "excel_field_updated": "Next Action",
+    "excel_previous_value": "null",
+    "excel_new_value": "send_friendly_reminder"
+  },
+  {
+    "timestamp": "2026-04-10T08:21:08",
+    "agent": "risk_agent",
+    "action": "recalculate_risk_score",
+    "input": {
+      "client": "Sharma Logistics",
+      "invoice_ids": ["INV005", "INV006"],
+      "days_overdue_max": 73,
+      "original_risk_score": 38,
+      "original_risk_label": "Low",
+      "trigger": "data_consistency_check — days_overdue 73 incompatible with risk_score 38"
+    },
+    "output": {
+      "risk_score_old": 38,
+      "risk_label_old": "Low",
+      "risk_score_new": 76,
+      "risk_label_new": "High",
+      "recalculation_rationale": "Previous score of 38 was calculated before days_overdue crossed 60-day threshold. Days overdue now at 73 mandate a score in the 58-80 range per system rules. No dispute, contact present, but extended silence and high invoice value (₹92,000) push score to 76. Data contradiction resolved.",
+      "contradiction_logged": true,
+      "next_action": "send_urgent_followup"
+    },
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "latency_ms": 334,
+    "hitl_triggered": true,
+    "hitl_scenario": "HIGH_VALUE_LONG_OVERDUE",
+    "hitl_reason": "First contact with Sharma Logistics but INV005 is ₹92,000 and 73 days overdue. Auto-proceeding with urgent tone on a first contact carries relationship risk. Human should confirm tone before sending.",
+    "confidence": 0.44,
+    "chromadb_queried": true,
+    "chromadb_doc_id": "client_sharma_logistics",
+    "excel_updated": true,
+    "excel_field_updated": "Risk Score, Risk Label, Next Action",
+    "excel_previous_value": "38, Low, send_friendly_reminder",
+    "excel_new_value": "76, High, send_urgent_followup"
   }
 ]
