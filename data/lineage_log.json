@@ -542,5 +542,47 @@
     "hitl_scenario": "FLAGGED_IN_CHROMADB",
     "confidence": 0.85,
     "checkpoint_id": "hitl_sharma_logistics_b65521"
+  },
+  {
+    "agent": "email_agent",
+    "client": "Sharma Logistics",
+    "action": "email_urgent_followup",
+    "email_sent": true,
+    "method": "gmail_smtp",
+    "tone": "urgent_followup",
+    "subject": "Urgent: Invoice INV017 is 101 days overdue \u2014 Action Required",
+    "contact_email": "soundrify@gmail.com",
+    "timestamp": "2026-04-18T21:38:36.085901+00:00"
+  },
+  {
+    "agent": "batch_supervisor",
+    "client": "Sharma Logistics",
+    "risk_score": 43,
+    "decision": "email_sent",
+    "timestamp": "2026-04-18T21:38:36.093122+00:00"
+  },
+  {
+    "agent": "action_agent",
+    "client": "Raj Traders",
+    "decision": "call_placed_real",
+    "call_sid": "CAe3956833d210aaed2f84284e612cbc8c",
+    "tone": "urgent",
+    "timestamp": "2026-04-18T21:38:38.028293+00:00"
+  },
+  {
+    "agent": "batch_supervisor",
+    "client": "Raj Traders",
+    "risk_score": 43,
+    "decision": "call_placed",
+    "timestamp": "2026-04-18T21:38:38.033821+00:00"
+  },
+  {
+    "timestamp": "2026-04-18T21:38:39.615291+00:00",
+    "agent": "action_agent",
+    "action": "HITL checkpoint created",
+    "hitl_triggered": true,
+    "hitl_scenario": "HIGH_RISK_DISPUTE",
+    "confidence": 0.75,
+    "checkpoint_id": "hitl_mehta_enterprises_04fde4"
   }
 ]

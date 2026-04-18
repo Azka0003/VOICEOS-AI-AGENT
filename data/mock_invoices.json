@@ -938,5 +938,44 @@
     "risk_score": 61,
     "risk_label": "Medium",
     "next_action": "resolve_contact_details"
+  },
+  {
+    "id": "INV102",
+    "client": "Verma Exports",
+    "amount": 216500,
+    "due_date": "2026-02-06",
+    "days_overdue": 72,
+    "status": "overdue",
+    "contact_name": "Suresh Verma",
+    "contact_email": "farazstudy112@gmail.com",
+    "contact_phone": "+919634143593",
+    "payment_history": [
+      "Silent for 60+ days",
+      "Prior call went unanswered",
+      "High-value account"
+    ],
+    "dispute_flag": false,
+    "risk_score": 82,
+    "risk_label": "High",
+    "next_action": "schedule_call"
+  },
+  {
+    "id": "INV103",
+    "client": "Sunrise Retail",
+    "amount": 18692,
+    "due_date": "2026-04-01",
+    "days_overdue": 18,
+    "status": "overdue",
+    "contact_name": "Ananya Sharma",
+    "contact_email": "farazstudy112@gmail.com",
+    "contact_phone": "",
+    "payment_history": [
+      "Paid INV-2025-03 on time",
+      "First overdue invoice"
+    ],
+    "dispute_flag": false,
+    "risk_score": 28,
+    "risk_label": "Low",
+    "next_action": "send_friendly_reminder"
   }
 ]
