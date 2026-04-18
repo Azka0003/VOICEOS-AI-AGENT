@@ -6,10 +6,11 @@ from fastapi import FastAPI, WebSocket, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+# FIXED: Removed 'backend.' from imports so it runs correctly from the backend folder
 from tools.twilio_tool import twilio_tool
 from tools.deepgram_tool import DeepgramVoiceAgent
 from tools.hitl_tool import hitl_manager
-from langchain_groq import ChatGroq
+from tools.llm_router import llm_router # FIXED: Using our new central router
 
 load_dotenv()
 
@@ -23,20 +24,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile")
-
 @app.get("/call/start")
 async def start_call(to_number: str, client_name: str):
-    # 1. Generate Script
+    # 1. Generate Script using the new LLM Router (Automatically logs to lineage!)
     script_prompt = f"Generate a 1-sentence greeting for {client_name} about an overdue invoice."
-    script = llm.invoke(script_prompt).content
-
-    # 2. HITL Checkpoint
-    approval = await hitl_manager.wait_for_human(
-        "call_approval", {"client": client_name, "script": script}
+    script = llm_router.invoke(
+        prompt=script_prompt,
+        mode="generation",
+        agent_name="main_api"
     )
 
-    if not approval.get("approved"):
+    # 2. HITL Checkpoint
+    # FIXED: Added the required 'reason' argument
+    approval = await hitl_manager.wait_for_human(
+        checkpoint_type="call_approval", 
+        context={"client": client_name, "script": script},
+        reason=f"Manual API call trigger requested for {client_name}. Review script before dialing."
+    )
+
+    # Note: wait_for_human returns the 'response' dict provided by the human
+    if not approval or not approval.get("approved"):
         return {"status": "cancelled"}
 
     # 3. Place Call
