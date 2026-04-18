@@ -115,9 +115,13 @@ def recalculate_days_overdue(due_date_raw) -> int:
         # Handle datetime objects natively returned by openpyxl
         if hasattr(due_date_raw, "date"):
             due = due_date_raw.date()
-        # Handle string parsing for DD-MMM-YYYY
+        # Handle string parsing for DD-MMM-YYYY or YYYY-MM-DD
         elif isinstance(due_date_raw, str):
-            due = datetime.strptime(due_date_raw.strip(), "%d-%b-%Y").date()
+            val = due_date_raw.strip()
+            try:
+                due = datetime.strptime(val, "%Y-%m-%d").date()
+            except ValueError:
+                due = datetime.strptime(val, "%d-%b-%Y").date()
         else:
             return 0
             

@@ -11,3 +11,4 @@ requests
 langchain-community
 langchain-core
 contextlib
+apscheduler --break-system-packages

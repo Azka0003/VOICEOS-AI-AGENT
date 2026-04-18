@@ -69,6 +69,90 @@ class HITLManager:
         with open(LINEAGE_LOG_PATH, "w") as f:
             json.dump(logs, f, indent=2)
 
+    async def trigger(self, scenario: str, confidence: float, context: dict, risk: dict) -> dict:
+        client = context.get("client", "Unknown Client")
+        amount = context.get("total_outstanding", 0)
+        days_overdue = context.get("max_days_overdue", 0)
+        risk_score = risk.get("risk_score", 50)
+        risk_label = risk.get("risk_label", "Medium")
+        contact_name = context.get("contact_name")
+        dispute_flag = context.get("dispute_flag", False)
+        
+        reason = f"Agent triggered HITL pause for {client}. Scenario: {scenario}. Confidence: {confidence}."
+        
+        checkpoint_id = f"hitl_{client.lower().replace(' ', '_')}_{secrets.token_hex(3)}"
+        
+        checkpoint = {
+            "checkpoint_id": checkpoint_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "trigger": {
+                "scenario_code": scenario,
+                "human_readable_reason": reason,
+                "confidence_before_pause": confidence,
+                "would_have_done": "unknown"
+            },
+            "invoice_context": {
+                "client": client,
+                "invoice_id": context.get("invoices", [{}])[0].get("id", "Unknown") if context.get("invoices") else "Unknown",
+                "amount": amount,
+                "days_overdue": days_overdue,
+                "risk_score": risk_score,
+                "risk_label": risk_label,
+                "dispute_flag": dispute_flag,
+                "contact_name": contact_name or None,
+                "contact_email": context.get("contact_email")
+            },
+            "comms_history_summary": {
+                "total_contacts": context.get("contact_count", 0),
+                "last_contact_type": "none",
+                "last_contact_date": None,
+                "last_tone": "none"
+            },
+            "options_for_human": [
+                {
+                    "option_id": "provide_contact",
+                    "label": "Provide correct contact name and proceed",
+                    "requires_input": {"contact_name": "string"}
+                },
+                {
+                    "option_id": "proceed_anyway",
+                    "label": "Proceed anyway, accept the risk",
+                    "requires_input": None
+                },
+                {
+                    "option_id": "skip",
+                    "label": "Skip this client for now, revisit in 2 days",
+                    "requires_input": None
+                },
+                {
+                    "option_id": "cancel",
+                    "label": "Cancel this action entirely",
+                    "requires_input": None
+                }
+            ],
+            "resolution": None,
+            "resolved_at": None,
+            "resolved_by": "human"
+        }
+
+        self.pending_actions[checkpoint_id] = checkpoint
+        self.events[checkpoint_id] = asyncio.Event()
+
+        self._log_lineage({
+            "agent": "action_agent",
+            "action": "HITL checkpoint created",
+            "hitl_triggered": True,
+            "hitl_scenario": scenario,
+            "confidence": confidence,
+            "checkpoint_id": checkpoint_id
+        })
+
+        print(f"\n[HITL PAUSED] Confidence: {confidence} | Scenario: {scenario}\n[REASON] {reason}\n")
+
+        await self.events[checkpoint_id].wait()
+        return self.pending_actions[checkpoint_id]["resolution"]
+
     async def evaluate_and_wait(self, invoice: dict, comms_history: list, planned_action: str) -> dict:
         confidence = compute_confidence(invoice, comms_history, planned_action)
 
@@ -320,3 +404,4 @@ class HITLManager:
 
 
 hitl_manager = HITLManager()
+hitl_tool = hitl_manager

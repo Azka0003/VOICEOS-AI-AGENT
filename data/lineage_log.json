@@ -533,5 +533,14 @@
     "promise_date": "this Friday",
     "amount_promised": "full amount",
     "source": "live_call"
+  },
+  {
+    "timestamp": "2026-04-18T18:46:36.266364+00:00",
+    "agent": "action_agent",
+    "action": "HITL checkpoint created",
+    "hitl_triggered": true,
+    "hitl_scenario": "FLAGGED_IN_CHROMADB",
+    "confidence": 0.85,
+    "checkpoint_id": "hitl_sharma_logistics_b65521"
   }
 ]
