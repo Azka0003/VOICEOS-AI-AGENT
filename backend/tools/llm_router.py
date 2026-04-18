@@ -47,7 +47,7 @@ except ImportError:
     OLLAMA_AVAILABLE = False
 
 # File Paths
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 LINEAGE_LOG_PATH = os.path.join(DATA_DIR, "lineage_log.json")
 
 

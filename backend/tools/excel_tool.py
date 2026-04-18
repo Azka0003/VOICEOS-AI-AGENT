@@ -19,7 +19,7 @@ class ExcelTool:
     
     _lock = threading.Lock()
 
-    def __init__(self, filepath="backend/data/invoices.xlsx"):
+    def __init__(self, filepath="data/invoices.xlsx"):
         """
         Initializes the Excel tool. Creates the file and formats headers if it does not exist.
         """
