@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from tools.twilio_tool import twilio_tool
-from tools.deepgram_tool import DeepgramVoiceAgent # Make sure this import is correct
+from tools.deepgram_tool import DeepgramVoiceAgent
 from tools.hitl_tool import hitl_manager
 from langchain_groq import ChatGroq
 
@@ -17,13 +17,12 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Consider restricting this in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Groq is still used for non-call tasks (e.g. script generation)
 llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile")
 
 @app.get("/call/start")
@@ -33,16 +32,12 @@ async def start_call(to_number: str, client_name: str):
     script = llm.invoke(script_prompt).content
 
     # 2. HITL Checkpoint
-    # approval = await hitl_manager.wait_for_human(
-    #     "call_approval", {"client": client_name, "script": script}
-    # )
+    approval = await hitl_manager.wait_for_human(
+        "call_approval", {"client": client_name, "script": script}
+    )
 
-    # if not approval.get("approved"):
-    #     return {"status": "cancelled"}
-    # For now, bypassing HITL for easier testing
-    print("[INFO] Bypassing HITL for call_approval.")
-    approval = {"approved": True}
-
+    if not approval.get("approved"):
+        return {"status": "cancelled"}
 
     # 3. Place Call
     base_url = os.getenv("BASE_URL")
@@ -54,12 +49,11 @@ async def start_call(to_number: str, client_name: str):
 @app.post("/call/twiml-initial")
 async def twiml_initial():
     domain = os.getenv("BASE_URL").replace("https://", "").replace("http://", "")
-    # The WebSocket URL is now using the /twilio-stream path
     response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-<Connect>
-<Stream url="wss://{domain}/twilio-stream" />
-</Connect>
+    <Connect>
+        <Stream url="wss://{domain}/twilio-stream" />
+    </Connect>
 </Response>"""
     return Response(content=response_xml, media_type="application/xml")
 
@@ -67,11 +61,8 @@ async def twiml_initial():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
-    # Initialize DeepgramVoiceAgent with a more specific system prompt
-    # You can customize this further if needed.
     agent = DeepgramVoiceAgent(
         twilio_ws=websocket,
-        system_prompt="You are a helpful AI assistant for a company. You are speaking to a user on the phone. You can hear them perfectly and should respond conversationally and concisely. Assume you are calling about an overdue invoice if appropriate. If you don't know who you are, introduce yourself as an AI assistant for the company."
     )
 
     # Run Deepgram Voice Agent in background
@@ -85,14 +76,10 @@ async def websocket_endpoint(websocket: WebSocket):
             event = packet.get("event")
 
             if event == "start":
-                # --- FIX: Capture streamSid and pass it to the agent ---
-                stream_sid = packet.get('start', {}).get('streamSid')
-                if stream_sid:
-                    agent.set_stream_sid(stream_sid)
-                    print(f"[TWILIO] Stream started: {stream_sid}")
-                else:
-                    print("[TWILIO] Warning: 'streamSid' not found in 'start' event.")
-                    # Handle this case if necessary, though it's unlikely for media streams
+                # CAPTURE streamSid AND GIVE IT TO THE AGENT
+                stream_sid = packet['start']['streamSid']
+                agent.set_stream_sid(stream_sid)
+                print(f"[TWILIO] Stream started: {stream_sid}")
 
             elif event == "media":
                 # Forward raw mulaw audio to Deepgram Voice Agent
