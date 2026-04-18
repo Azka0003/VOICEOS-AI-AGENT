@@ -2,15 +2,18 @@ import os
 import json
 import base64
 import asyncio
+from urllib.parse import quote # Added for URL encoding
 from fastapi import FastAPI, WebSocket, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# FIXED: Removed 'backend.' from imports so it runs correctly from the backend folder
 from tools.twilio_tool import twilio_tool
 from tools.deepgram_tool import DeepgramVoiceAgent
 from tools.hitl_tool import hitl_manager
-from tools.llm_router import llm_router # FIXED: Using our new central router
+from tools.llm_router import llm_router
+
+# UPDATE: Import the InvoiceAgent to fetch real data
+from agents.invoice_agent import InvoiceAgent
 
 load_dotenv()
 
@@ -26,7 +29,6 @@ app.add_middleware(
 
 @app.get("/call/start")
 async def start_call(to_number: str, client_name: str):
-    # 1. Generate Script using the new LLM Router (Automatically logs to lineage!)
     script_prompt = f"Generate a 1-sentence greeting for {client_name} about an overdue invoice."
     script = llm_router.invoke(
         prompt=script_prompt,
@@ -34,42 +36,73 @@ async def start_call(to_number: str, client_name: str):
         agent_name="main_api"
     )
 
-    # 2. HITL Checkpoint
-    # FIXED: Added the required 'reason' argument
     approval = await hitl_manager.wait_for_human(
         checkpoint_type="call_approval", 
         context={"client": client_name, "script": script},
         reason=f"Manual API call trigger requested for {client_name}. Review script before dialing."
     )
 
-    # Note: wait_for_human returns the 'response' dict provided by the human
     if not approval or not approval.get("approved"):
         return {"status": "cancelled"}
 
-    # 3. Place Call
     base_url = os.getenv("BASE_URL")
-    twiml_url = f"{base_url}/call/twiml-initial"
+    
+    # UPDATE: Pass client_name safely to Twilio so Twilio sends it back to us
+    safe_client = quote(client_name)
+    twiml_url = f"{base_url}/call/twiml-initial?client_name={safe_client}"
+    
     call_sid = twilio_tool.make_call(to_number, twiml_url)
 
     return {"status": "calling", "call_sid": call_sid}
 
+# UPDATE: Accept client_name from Twilio
 @app.post("/call/twiml-initial")
-async def twiml_initial():
+async def twiml_initial(client_name: str = ""):
     domain = os.getenv("BASE_URL").replace("https://", "").replace("http://", "")
+    safe_client = quote(client_name)
+    
+    # UPDATE: Pass client_name to the WebSocket URL
     response_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
-        <Stream url="wss://{domain}/twilio-stream" />
+        <Stream url="wss://{domain}/twilio-stream?client_name={safe_client}" />
     </Connect>
 </Response>"""
     return Response(content=response_xml, media_type="application/xml")
 
+# UPDATE: Accept client_name in the WebSocket
 @app.websocket("/twilio-stream")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, client_name: str = ""):
     await websocket.accept()
 
+    # --- FETCH LIVE DATA FROM DATABASE ---
+    inv_agent = InvoiceAgent()
+    client_data = inv_agent.get_client_data(client_name)
+
+    # Build the prompt dynamically
+    if client_data:
+        total_due = client_data['total_due']
+        days_overdue = client_data['max_days_overdue']
+        contact = client_data['contact_info']['name'] or "Sir/Madam"
+        
+        system_prompt = (
+            f"You are DebtPilot, an AI payment assistant calling from an Indian firm. "
+            f"You are currently on a phone call with {contact} representing {client_name}. "
+            f"They have an overdue balance of ₹{total_due}, which is {days_overdue} days late. "
+            f"Your goal is to politely inform them of the overdue amount and ask when the payment can be expected. "
+            f"Keep your responses extremely short, conversational, and natural. Pause to let them speak. "
+            f"Do NOT say 'How can I help you' because you are the one making the call."
+        )
+        greeting = f"Hello, am I speaking with {contact} from {client_name}?"
+    else:
+        system_prompt = "You are a professional voice assistant on a phone call. Keep responses short."
+        greeting = "Hello, how can I help you today?"
+
+    # Inject the knowledge directly into the agent
     agent = DeepgramVoiceAgent(
         twilio_ws=websocket,
+        system_prompt=system_prompt,
+        greeting=greeting
     )
 
     # Run Deepgram Voice Agent in background
@@ -83,13 +116,11 @@ async def websocket_endpoint(websocket: WebSocket):
             event = packet.get("event")
 
             if event == "start":
-                # CAPTURE streamSid AND GIVE IT TO THE AGENT
                 stream_sid = packet['start']['streamSid']
                 agent.set_stream_sid(stream_sid)
                 print(f"[TWILIO] Stream started: {stream_sid}")
 
             elif event == "media":
-                # Forward raw mulaw audio to Deepgram Voice Agent
                 audio_bytes = base64.b64decode(packet["media"]["payload"])
                 agent.send_audio(audio_bytes)
 

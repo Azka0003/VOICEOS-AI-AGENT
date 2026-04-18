@@ -39,5 +39,59 @@
     "time_to_resolve_seconds": 142.327938,
     "hitl_triggered": true,
     "hitl_reason": "Manual API call trigger requested for Raj Traders. Review script before dialing."
+  },
+  {
+    "timestamp": "2026-04-18T08:02:52.631901+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 857,
+    "prompt_length_chars": 66,
+    "response_length_chars": 167,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T08:03:14.719319+00:00",
+    "agent": "hitl_manager",
+    "action": "checkpoint_resolved",
+    "checkpoint_id": "HITL-CALL_APPROVAL-34d7e2",
+    "reason_paused": "Manual API call trigger requested for Faraz. Review script before dialing.",
+    "human_response": {
+      "approved": true
+    },
+    "time_to_resolve_seconds": 22.038769,
+    "hitl_triggered": true,
+    "hitl_reason": "Manual API call trigger requested for Faraz. Review script before dialing."
+  },
+  {
+    "timestamp": "2026-04-18T09:40:14.462601+00:00",
+    "agent": "main_api",
+    "action": "llm_invoke",
+    "llm_used": "groq/llama-3.3-70b-versatile",
+    "mode": "generation",
+    "latency_ms": 1542,
+    "prompt_length_chars": 66,
+    "response_length_chars": 163,
+    "fallback_used": false,
+    "hitl_triggered": false,
+    "hitl_reason": null,
+    "context": {}
+  },
+  {
+    "timestamp": "2026-04-18T09:40:40.530556+00:00",
+    "agent": "hitl_manager",
+    "action": "checkpoint_resolved",
+    "checkpoint_id": "HITL-CALL_APPROVAL-fed75e",
+    "reason_paused": "Manual API call trigger requested for Faraz. Review script before dialing.",
+    "human_response": {
+      "approved": true
+    },
+    "time_to_resolve_seconds": 25.961023,
+    "hitl_triggered": true,
+    "hitl_reason": "Manual API call trigger requested for Faraz. Review script before dialing."
   }
 ]
