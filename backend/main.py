@@ -94,6 +94,7 @@ app.add_middleware(
 
 invoice_agent = InvoiceAgent()
 action_agent  = ActionAgent()
+action_agent.set_broadcast(broadcast)   # gives action_agent access to SSE stream
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Health
@@ -420,6 +421,8 @@ if __name__ == "__main__":
 from fastapi.staticfiles import StaticFiles
 import pathlib
 
-_FRONTEND = pathlib.Path(__file__).parent.parent / "frontend"
-if _FRONTEND.exists():
-    app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="frontend")
+_FRONTEND_DIST = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
+_FRONTEND_LEGACY = pathlib.Path(__file__).parent.parent / "frontend"
+_STATIC_DIR = _FRONTEND_DIST if _FRONTEND_DIST.exists() else _FRONTEND_LEGACY
+if _STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="frontend")

@@ -21,12 +21,23 @@ email_agent = EmailAgent()
 
 BASE_URL = "https://your-server.ngrok.io"  # Replace with actual server URL in prod
 
+# ── Demo broadcast hook (set by main.py at startup) ───────────────────────────
+# main.py calls ActionAgent.set_broadcast(broadcast_fn) after creating the app.
+# This lets action_agent push live events to the SSE stream without circular import.
+_broadcast_fn = None
+
 
 class ActionAgent:
     """
     Decision engine. Reads Next Action from context (sourced from Excel),
     validates it, runs HITL confidence checks, then executes.
     """
+
+    @staticmethod
+    def set_broadcast(fn):
+        """Called by main.py to inject the SSE broadcast function."""
+        global _broadcast_fn
+        _broadcast_fn = fn
 
     async def decide(self, context: dict, risk: dict) -> dict:
         """
@@ -106,69 +117,16 @@ class ActionAgent:
 
     async def _execute_call(self, context: dict, risk: dict) -> dict:
         """
-        Builds the ChromaDB-sourced call system prompt, places the Twilio call,
-        and registers the DeepgramVoiceAgent context.
+        Uses demo_actions.demo_call — places a real Twilio call if creds exist,
+        otherwise runs a live simulated transcript through SSE so judges see
+        the Call Monitor tab light up in real time.
         """
-        invoice_list = [
-            f"{inv['id']} — ₹{inv['amount']:,}" for inv in context["invoices"]
-        ]
+        from demo_actions import demo_call
 
-        system_prompt = f"""
-You are DebtPilot, an AI collections agent calling on behalf of [Company Name]'s
-accounts receivable team.
+        async def _noop(ev): pass
+        broadcast = _broadcast_fn if _broadcast_fn else _noop
 
-YOUR BRIEFING FOR THIS CALL:
-{context["briefing_text"]}
-
-CALL PROTOCOL — FOLLOW THIS EXACTLY:
-
-1. IDENTITY VERIFICATION (mandatory first step):
-   Ask: "Hello, this is an automated call from [Company]'s accounts team.
-   May I please speak with {context["contact_name"]}?"
-
-2. CLASSIFY THE RESPONSE:
-   - CONFIRMED: Person says yes, says "speaking", or confirms their name
-   - WRONG_PERSON: Someone else answers
-   - WRONG_NUMBER: Person doesn't know the contact or the company
-   - NO_RESPONSE: Silence or unclear
-
-3. IF CONFIRMED → proceed with collections script using briefing above
-4. IF WRONG_PERSON → ask for {context["contact_name"]}, get callback info, end politely
-5. IF WRONG_NUMBER → apologise sincerely, end immediately, flag for HITL
-6. IF NO_RESPONSE → wait 8 seconds, try once, then hang up gracefully
-
-TONE FOR THIS CALL: {risk["recommended_tone"]}
-TOTAL OUTSTANDING: ₹{context["total_outstanding"]:,}
-INVOICES: {invoice_list}
-
-AFTER THE CALL — extract and return:
-- call_outcome: confirmed | wrong_person | wrong_number | no_response
-- payment_commitment: date string if client committed, null if not
-- next_action: what should happen next
-- notes: any important information gathered
-"""
-
-        # Place the call via Twilio
-        call_sid = twilio_tool.make_call(
-            to_number=context["contact_phone"],
-            twiml_url=f"{BASE_URL}/call/twiml-initial",
-            system_prompt=system_prompt
-        )
-
-        lineage_logger.log({
-            "agent": "action_agent",
-            "client": context["client"],
-            "decision": "call_placed",
-            "call_sid": call_sid,
-            "tone": risk["recommended_tone"]
-        })
-
-        return {
-            "decision": "call_placed",
-            "call_sid": call_sid,
-            "tone": risk["recommended_tone"],
-            "note": "Awaiting call completion webhook to trigger post-call updates."
-        }
+        return await demo_call(context, risk, broadcast)
 
     async def handle_call_webhook(
         self,
@@ -264,9 +222,15 @@ AFTER THE CALL — extract and return:
 
     async def _execute_email(self, context: dict, risk: dict, requested_tone: str) -> dict:
         """
-        Delegates to Email Agent for generation and sending.
+        Uses demo_actions.demo_email — sends a real Gmail email if SMTP creds exist,
+        otherwise simulates and fires SSE events so the Agent Feed updates live.
         """
-        result = await email_agent.send_collection_email(context, requested_tone)
+        from demo_actions import demo_email
+
+        async def _noop(ev): pass
+        broadcast = _broadcast_fn if _broadcast_fn else _noop
+
+        result = await demo_email(context, requested_tone, broadcast)
         return {"decision": "email_sent", "email_result": result}
 
     # ── Escalation ────────────────────────────────────────────────────────────
