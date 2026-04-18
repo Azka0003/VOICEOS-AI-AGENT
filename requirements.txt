@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+twilio
+deepgram-sdk>=3.0.0
+websockets
+httpx
+langchain
+langchain-groq
+requests
